@@ -76,43 +76,6 @@ export default function Component() {
     return workflowDialogRef.current?.handleOpenDialog()
   }
 
-  const nodeTypes: NodeTypes = useMemo(
-    () => ({
-      initial: (props) => (
-        <TriggerNode
-          {...props}
-          data={{
-            ...props.data,
-            onAddNode: handleAddConnectedNode,
-          }}
-        />
-      ),
-      condition: (props) => (
-        <ConditionNode
-          {...props}
-          data={{
-            ...props.data,
-            onDeleteNode: deleteNode,
-            onAddNode: handleAddConnectedNode,
-          }}
-        />
-      ),
-      provider: (props) => (
-        <ProviderNode {...props} onDeleteNode={deleteNode} />
-      ),
-    }),
-    [nodes, edges],
-  )
-
-  const edgeTypes: EdgeTypes = useMemo(
-    () => ({
-      custom: (props) => (
-        <CustomEdge {...props} onDeleteEdge={deleteEdge} nodes={nodes} />
-      ),
-    }),
-    [nodes],
-  )
-
   const onConnect = useCallback(
     (params: Connection) => {
       const edge: Edge = {
@@ -147,6 +110,15 @@ export default function Component() {
       setEdges((eds) => eds.filter((edge) => edge.id !== edgeId))
     },
     [setEdges],
+  )
+
+  const edgeTypes: EdgeTypes = useMemo(
+    () => ({
+      custom: (props) => (
+        <CustomEdge {...props} onDeleteEdge={deleteEdge} nodes={nodes} />
+      ),
+    }),
+    [deleteEdge, nodes],
   )
 
   const isPositionOccupied = useCallback(
@@ -495,89 +467,98 @@ export default function Component() {
     setNodes(newNodes)
   }, [nodes, edges, setNodes])
 
-  function handleAddConnectedNode(
-    nodeType: NodeTypeDefinition,
-    sourceNodeId: string,
-    handleId?: string,
-  ) {
-    const sourceNode = nodes.find((node) => node.id === sourceNodeId)
-    if (!sourceNode) return
+  const handleAddConnectedNode = useCallback(
+    (nodeType: NodeTypeDefinition, sourceNodeId: string, handleId?: string) => {
+      const sourceNode = nodes.find((node) => node.id === sourceNodeId)
+      if (!sourceNode) return
 
-    // Verifica se o handle já está conectado
-    const existingConnection = edges.find(
-      (edge) => edge.source === sourceNodeId && edge.sourceHandle === handleId,
-    )
+      // Verifica se o handle já está conectado
+      const existingConnection = edges.find(
+        (edge) =>
+          edge.source === sourceNodeId && edge.sourceHandle === handleId,
+      )
 
-    if (existingConnection) {
-      return
-    }
+      if (existingConnection) {
+        return
+      }
 
-    // Calcula posição base
-    let baseYOffset = 0
-    if (handleId?.includes('handle-1')) {
-      baseYOffset = -100 // Handle superior
-    } else if (handleId?.includes('handle-2')) {
-      baseYOffset = 100 // Handle inferior
-    }
+      // Calcula posição base
+      let baseYOffset = 0
+      if (handleId?.includes('handle-1')) {
+        baseYOffset = -100 // Handle superior
+      } else if (handleId?.includes('handle-2')) {
+        baseYOffset = 100 // Handle inferior
+      }
 
-    const basePosition = {
-      x: sourceNode.position.x,
-      y: sourceNode.position.y + baseYOffset,
-    }
+      const basePosition = {
+        x: sourceNode.position.x,
+        y: sourceNode.position.y + baseYOffset,
+      }
 
-    // Encontra a melhor posição disponível
-    const position = findBestPosition(basePosition, handleId)
+      // Encontra a melhor posição disponível
+      const position = findBestPosition(basePosition, handleId)
 
-    const newNodeId = `${nodeType.id}-${nodeIdCounter}`
-    const newNode: Node = {
-      id: newNodeId,
-      type: nodeType.type,
-      position,
-      data: {
-        label: nodeType.label,
-        icon: nodeType.icon,
-        color: nodeType.color,
-        nodeType: nodeType.id,
-        hasOperator: nodeType.hasOperator,
-        operatorOptions: nodeType.operatorOptions,
-        operator: nodeType.hasOperator ? '=' : undefined,
-        value: nodeType.defaultValue || '',
-        onDeleteNode: deleteNode,
-        onAddNode: handleAddConnectedNode,
-      },
-    }
+      const newNodeId = `${nodeType.id}-${nodeIdCounter}`
+      const newNode: Node = {
+        id: newNodeId,
+        type: nodeType.type,
+        position,
+        data: {
+          label: nodeType.label,
+          icon: nodeType.icon,
+          color: nodeType.color,
+          nodeType: nodeType.id,
+          hasOperator: nodeType.hasOperator,
+          operatorOptions: nodeType.operatorOptions,
+          operator: nodeType.hasOperator ? '=' : undefined,
+          value: nodeType.defaultValue || '',
+          onDeleteNode: deleteNode,
+          onAddNode: handleAddConnectedNode,
+        },
+      }
 
-    setNodes((nds) => nds.concat(newNode))
-    setNodeIdCounter((counter) => counter + 1)
+      setNodes((nds) => nds.concat(newNode))
+      setNodeIdCounter((counter) => counter + 1)
 
-    // Cria a conexão
-    const newEdge: Edge = {
-      id: `edge-${sourceNodeId}-${newNodeId}-${Date.now()}`,
-      source: sourceNodeId,
-      target: newNodeId,
-      sourceHandle: handleId,
-      type: 'custom',
-      data: {
-        handleType: handleId?.includes('handle-1') ? 'primary' : 'secondary',
-        label: getHandleLabelByType(sourceNode.id, handleId),
-      },
-      markerEnd: {
-        type: MarkerType.ArrowClosed,
-        width: 10,
-        height: 10,
-      },
-    }
+      // Cria a conexão
+      const newEdge: Edge = {
+        id: `edge-${sourceNodeId}-${newNodeId}-${Date.now()}`,
+        source: sourceNodeId,
+        target: newNodeId,
+        sourceHandle: handleId,
+        type: 'custom',
+        data: {
+          handleType: handleId?.includes('handle-1') ? 'primary' : 'secondary',
+          label: getHandleLabelByType(sourceNode.id, handleId),
+        },
+        markerEnd: {
+          type: MarkerType.ArrowClosed,
+          width: 10,
+          height: 10,
+        },
+      }
 
-    setEdges((eds) => eds.concat(newEdge))
-    setTimeout(() => {
-      reactFlowInstance.fitView({
-        padding: 50,
-        duration: 500,
-        minZoom: 0.3,
-        maxZoom: 1.5,
-      })
-    }, 100)
-  }
+      setEdges((eds) => eds.concat(newEdge))
+      setTimeout(() => {
+        reactFlowInstance.fitView({
+          padding: 50,
+          duration: 500,
+          minZoom: 0.3,
+          maxZoom: 1.5,
+        })
+      }, 100)
+    },
+    [
+      nodes,
+      edges,
+      findBestPosition,
+      nodeIdCounter,
+      deleteNode,
+      setNodes,
+      setEdges,
+      reactFlowInstance,
+    ],
+  )
 
   const addNode = useCallback(
     (nodeTypeDef: NodeTypeDefinition, position: { x: number; y: number }) => {
@@ -625,7 +606,7 @@ export default function Component() {
       addNode(selectedNodeType, position)
       setSelectedNodeType(null)
     },
-    [selectedNodeType, addNode],
+    [selectedNodeType, addNode, reactFlowInstance],
   )
 
   const generateWorkflowRules = (name: string, description: string) => {
@@ -1215,7 +1196,35 @@ export default function Component() {
       setNodes(newNodes)
       setEdges(newEdges)
     },
-    [setNodes, setEdges, reactFlowInstance, deleteNode],
+    [setNodes, setEdges, deleteNode, handleAddConnectedNode],
+  )
+
+  const nodeTypes: NodeTypes = useMemo(
+    () => ({
+      initial: (props) => (
+        <TriggerNode
+          {...props}
+          data={{
+            ...props.data,
+            onAddNode: handleAddConnectedNode,
+          }}
+        />
+      ),
+      condition: (props) => (
+        <ConditionNode
+          {...props}
+          data={{
+            ...props.data,
+            onDeleteNode: deleteNode,
+            onAddNode: handleAddConnectedNode,
+          }}
+        />
+      ),
+      provider: (props) => (
+        <ProviderNode {...props} onDeleteNode={deleteNode} />
+      ),
+    }),
+    [deleteNode, handleAddConnectedNode],
   )
 
   // Função para carregar workflow específico pelo ID
